@@ -74,7 +74,49 @@
 //!
 //! ## Features
 //!
-//! There are a few optional features, `utf8` and `custom-panic-handler`.
+//! There are a few optional features, selections for the chips, `utf8`, `min-panic` and `custom-panic-handler`.
+//!
+//! ### Chips (`cortex-m`, `rp2040`, `rp235x` or none)
+//!
+//! #### `cortex-m`, `rp2040` & `rp235x`
+//!
+//! To use it out of the box for a specific supported chip select the appropriate feature:
+//!
+//! ```toml
+//! [dependencies]
+//! # For Cortex M-Series chips:
+//! panic-persist = { version = "<version>", features = ["cortex-m"] }
+//! # For the RP2040 chip (Raspberry Pi Pico 1):
+//! panic-persist = { version = "<version>", features = ["rp2040"] }
+//! # For the RP2350 chip (Raspberry Pi Pico 2, both ARM & RISC-V supported):
+//! panic-persist = { version = "<version>", features = ["rp235x"] }
+//! ```
+//!
+//! ### No chip feature selected
+//!
+//! _This can also be used to use `panic-persist` with a custom error handler_
+//!
+//! If none of the board features is selected the panic handler from this library is disabled so that any user can implement their own.
+//! To persist panic messages, the function `report_panic_info` is made available;
+//!
+//! ```rust
+//! use core::panic::PanicInfo;
+//! // For example if using a RP2350
+//! use rp235x_hal::{reset, arch::interrupt_disable};
+//!
+//! // My custom panic implementation
+//! #[panic_handler]
+//! fn panic(info: &PanicInfo) -> ! {
+//!     // Disable interrupts (customize for your platform)
+//!     interrupt_disable();
+//!
+//!     // Write the panic information
+//!     panic_persist::report_panic_info(info);
+//!
+//!     // Reset the processor (customize for your platform)
+//!     reset()
+//! }
+//! ```
 //!
 //! ### utf8
 //!
@@ -82,21 +124,6 @@
 //! as a `&str` rather than `&[u8]`, for easier printing. As this requires the ability
 //! to validate the UTF-8 string (to ensure it wasn't truncated mid-character), it may
 //! increase code size usage, and is by default off.
-//!
-//! ### custom-panic-handler
-//!
-//! This disables the panic handler from this library so that any user can implement their own.
-//! To persist panic messages, the function `report_panic_info` is made available;
-//!
-//! ```rust
-//! // My custom panic implementation
-//! #[panic_handler]
-//! fn panic(info: &PanicInfo) -> ! {
-//!     // ...
-//!     panic_persist::report_panic_info(info);
-//!     // ...
-//! }
-//! ```
 //!
 //! ### min-panic
 //!
@@ -117,7 +144,7 @@ struct Ram {
 }
 
 /// Internal Write implementation to output the formatted panic string into RAM
-impl core::fmt::Write for Ram {
+impl Write for Ram {
     fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
         // Obtain panic region start and end from linker symbol _panic_dump_start and _panic_dump_end
         extern "C" {
@@ -130,8 +157,8 @@ impl core::fmt::Write for Ram {
         let len = data.len();
 
         // Obtain info about the panic dump region
-        let start_ptr = unsafe { &mut _panic_dump_start as *mut u8 };
-        let end_ptr = unsafe { &mut _panic_dump_end as *mut u8 };
+        let start_ptr = &raw mut _panic_dump_start;
+        let end_ptr = &raw mut _panic_dump_end;
         let max_len = end_ptr as usize - start_ptr as usize;
         let max_len_str = max_len - size_of::<usize>() - size_of::<usize>();
 
@@ -186,7 +213,7 @@ pub fn get_panic_message_bytes() -> Option<&'static [u8]> {
         static mut _panic_dump_end: u8;
     }
 
-    let start_ptr = unsafe { &mut _panic_dump_start as *mut u8 };
+    let start_ptr = &raw mut _panic_dump_start;
 
     if 0x0FACADE0 != unsafe { core::ptr::read_unaligned(start_ptr.cast::<usize>()) } {
         return None;
@@ -199,7 +226,7 @@ pub fn get_panic_message_bytes() -> Option<&'static [u8]> {
     }
 
     // Obtain info about the panic dump region
-    let end_ptr = unsafe { &mut _panic_dump_end as *mut u8 };
+    let end_ptr = &raw mut _panic_dump_end ;
     let max_len = end_ptr as usize - start_ptr as usize;
     let max_len_str = max_len - size_of::<usize>() - size_of::<usize>();
 
@@ -241,19 +268,7 @@ pub fn get_panic_message_utf8() -> Option<&'static str> {
     }
 }
 
-/// Report the panic so the message is persisted.
-///
-/// This function is used in custom panic handlers.
-#[cfg(feature = "custom-panic-handler")]
-pub fn report_panic_info(info: &PanicInfo) {
-    writeln!(Ram { offset: 0 }, "{}", info).ok();
-}
-
-#[cfg(not(feature = "custom-panic-handler"))]
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    cortex_m::interrupt::disable();
-
+fn report_panic_info_internal(info: &PanicInfo) {
     #[cfg(feature = "min-panic")]
     if let Some(location) = info.location() {
         writeln!(Ram { offset: 0 }, "Panicked at {}", location).ok();
@@ -263,6 +278,42 @@ fn panic(info: &PanicInfo) -> ! {
 
     #[cfg(not(feature = "min-panic"))]
     writeln!(Ram { offset: 0 }, "{}", info).ok();
+}
+
+/// Report the panic so the message is persisted.
+///
+/// This function is used in custom panic handlers.
+#[cfg(not(any(feature = "cortex-m", feature = "rp2040", feature = "rp235x")))]
+pub fn report_panic_info(info: &PanicInfo) {
+    report_panic_info_internal(info);
+}
+
+#[cfg(feature = "cortex-m")]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    cortex_m::interrupt::disable();
+
+    report_panic_info_internal(info);
 
     cortex_m::peripheral::SCB::sys_reset();
+}
+
+#[cfg(feature = "rp2040")]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    rp2040_hal::arch::interrupt_disable();
+
+    report_panic_info_internal(info);
+
+    rp2040_hal::reset();
+}
+
+#[cfg(feature = "rp235x")]
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    rp235x_hal::arch::interrupt_disable();
+
+    report_panic_info_internal(info);
+
+    rp235x_hal::reset();
 }

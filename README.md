@@ -18,6 +18,33 @@ to other platforms as required.
 
 ## Usage
 
+### Configure the used board
+
+#### Cortex M
+For Cortex M-Series Chips use the following feature:
+```toml
+panic-persist = { version = "<version>", features = ["cortex-m"] }
+```
+
+#### Raspberry Pi RP2040
+For a RP2040 chip (Raspberry Pi Pico 1) use the following feature:
+```toml
+panic-persist = { version = "<version>", features = ["rp2040"] }
+```
+
+#### Raspberry Pi RP2350
+For a RP2350 chip (Raspberry Pi Pico 2) use the following feature:
+```toml
+panic-persist = { version = "<version>", features = ["rp2040"] }
+```
+_Supports both ARM and RISC-V modes_
+
+#### A different chip / I don't want to use the built-in handler
+
+A different chip can be supported when selecting none of the board features adn then building a
+custom panic handler that calls `report_panic_info()`. More information can be found in the
+documentation.
+
 ### Add a section to your linker script
 
 You will need to reserve a section of RAM to be used to persist messages. This section must be
