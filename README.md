@@ -20,22 +20,22 @@ to other platforms as required.
 
 ### Configure the used board
 
-#### Cortex M
+#### Cortex M based board
 For Cortex M-Series Chips use the following feature:
 ```toml
 panic-persist = { version = "<version>", features = ["cortex-m"] }
 ```
 
-#### Raspberry Pi RP2040
+#### Raspberry Pi RP2040 (Pico 1)
 For a RP2040 chip (Raspberry Pi Pico 1) use the following feature:
 ```toml
 panic-persist = { version = "<version>", features = ["rp2040"] }
 ```
 
-#### Raspberry Pi RP2350
+#### Raspberry Pi RP2350 (Pico 2)
 For a RP2350 chip (Raspberry Pi Pico 2) use the following feature:
 ```toml
-panic-persist = { version = "<version>", features = ["rp2040"] }
+panic-persist = { version = "<version>", features = ["rp235x"] }
 ```
 _Supports both ARM and RISC-V modes_
 
