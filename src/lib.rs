@@ -74,7 +74,7 @@
 //!
 //! ## Features
 //!
-//! There are a few optional features, selections for the chips, `utf8`, `min-panic` and `custom-panic-handler`.
+//! There are a few optional features, selections for the chips, `utf8` and `min-panic`.
 //!
 //! ### Chips (`cortex-m`, `rp2040`, `rp235x` or none)
 //!
